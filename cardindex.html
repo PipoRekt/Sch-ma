@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Schémas Flash</title>
+<style>
+:root{--bg:#f4f3ef;--fg:#1c1b19;--card:#fff;--mut:#77746c;--ac:#5b5bd6;--ok:#1f9d55;--ko:#e8590c;--bd:#e6e3db;--mask:#34322e;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131312;--fg:#f0eee8;--card:#201f1d;--mut:#9b988f;--bd:#34322e;--mask:#cfccc1;--ac:#7c7cf0}}
+:root[data-theme="dark"]{--bg:#131312;--fg:#f0eee8;--card:#201f1d;--mut:#9b988f;--bd:#34322e;--mask:#cfccc1;--ac:#7c7cf0}
+html,body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,sans-serif}
+#app{max-width:640px;margin:0 auto;padding:16px 16px 100px}
+h1{font-size:24px;margin:4px 0 2px}h2{font-size:16px;margin:22px 0 10px}
+button,.btn{font:inherit;border-radius:12px;padding:11px 14px;background:var(--card);color:var(--fg);border:1px solid var(--bd);cursor:pointer}
+button:disabled{opacity:.35}
+.pri{background:var(--ac);color:#fff;border-color:var(--ac)}.ok{background:var(--ok);color:#fff;border-color:var(--ok)}.ko{background:var(--ko);color:#fff;border-color:var(--ko)}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.s{flex:0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+.top{display:flex;gap:12px;align-items:center;margin-bottom:10px}.top img{width:72px;height:72px;object-fit:cover;border-radius:10px}.top>div{flex:1;min-width:0}
+.mut{color:var(--mut);font-size:13px}
+input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);margin-bottom:8px}
+.stage{position:relative;line-height:0;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:12px;overflow:hidden;border:1px solid var(--bd)}
+.stage *{pointer-events:none}.stage img{width:100%;display:block}
+.m{position:absolute;background:var(--mask);border-radius:3px;box-shadow:0 0 0 1px var(--bg);color:var(--bg);font:700 11px/1 system-ui;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cur{background:var(--ac);box-shadow:0 0 0 3px #fff,0 0 0 5px var(--ac)}
+.sel{background:var(--ac);opacity:.85;box-shadow:0 0 0 2px #fff}
+.rev{background:transparent;box-shadow:0 0 0 3px var(--ok)}
+.hd{position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--ac);transform:translate(-50%,-50%)}
+.bar,.tabs{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:var(--bg);border-top:1px solid var(--bd)}
+.bar .row,.tabs .row{max-width:640px;margin:auto}
+.tabs button{border:0;background:none;color:var(--mut);font-size:14px}.tabs .on{color:var(--ac);font-weight:700}
+.prog{height:8px;background:var(--bd);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--ok);border-radius:4px}
+.center{text-align:center;padding:36px 0}
+.kp{display:grid;grid-template-columns:1fr 1fr;gap:10px}.kp .card{margin:0;text-align:center}.kp b{font-size:26px;display:block}
+.chart{display:flex;align-items:flex-end;gap:4px;height:110px}.chart>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;text-align:center}
+.chart i{display:block;border-radius:3px 3px 0 0}.chart span{font-size:10px;color:var(--mut);line-height:1.6}
+</style></head><body><div id="app"></div>
+<script>
+let S=[],L={};try{S=JSON.parse(localStorage.getItem('sf')||'[]');L=JSON.parse(localStorage.getItem('sfl')||'{}')}catch(e){}
+const save=()=>{try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L))}catch(e){alert('Stockage plein : supprime un schéma.')}};
+const $=id=>document.getElementById(id),app=$('app');
+const esc=t=>String(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const day=d=>(d||new Date()).toLocaleDateString('sv');
+const mast=s=>s.masks.filter(m=>m.last===1).length, weak=s=>s.masks.map((m,k)=>m.last===0?k:-1).filter(k=>k>=0);
+const pc=(a,b)=>b?Math.round(a/b*100):0;
+let D,st,sel=-1,tmp=null,hist=[];
+
+function tabs(on){return `<div class="tabs"><div class="row"><button class="${on=='h'?'on':''}" onclick="home()">📚 Schémas</button><button class="${on=='s'?'on':''}" onclick="stats()">📊 Statistiques</button></div></div>`}
+function home(){
+  app.innerHTML=`<h1>🧠 Schémas Flash</h1><div class="mut" style="margin-bottom:14px">${S.length} schéma(s) · ${S.reduce((a,s)=>a+s.masks.length,0)} cartes</div>
+  <label class="btn pri" style="display:block;text-align:center;margin-bottom:10px">📷 Nouveau schéma (photo ou galerie)<input type="file" accept="image/*" hidden onchange="pick(this.files[0])"></label>
+  <div class="row" style="margin-bottom:16px"><label class="btn" style="text-align:center">📥 Importer<input type="file" accept=".json,application/json" multiple hidden onchange="imp(this.files);this.value=''"></label><button onclick="S.length&&out(S,'mes-fiches')">📤 Tout partager</button></div>
+  ${S.length?S.map((s,i)=>{const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="top"><img src="${s.img}"><div><b>${esc(s.name)}</b>
+  <div class="mut">${s.masks.length} cartes${s.by?' · par '+esc(s.by):''}</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div>
+  <div class="row"><button class="pri" onclick="start(${i})">Réviser</button>${w?`<button class="ko" onclick="start(${i},1)">Ratées (${w})</button>`:''}<button class="s" onclick="out([S[${i}]],S[${i}].name)">📤</button><button class="s" onclick="edit(${i})">✏️</button></div></div>`}).join(''):'<p class="mut center">Prends un schéma en photo, masque les légendes, révise.</p>'}${tabs('h')}`;
+}
+function stats(){
+  const days=[...Array(14)].map((_,k)=>{const d=new Date();d.setDate(d.getDate()-13+k);const k2=day(d);return{k:k2,l:d.toLocaleDateString('fr',{weekday:'narrow'}),...(L[k2]||{ok:0,ko:0})}});
+  const ok=Object.values(L).reduce((a,x)=>a+x.ok,0),ko=Object.values(L).reduce((a,x)=>a+x.ko,0);
+  let streak=0,d=new Date();if(!L[day(d)])d.setDate(d.getDate()-1);while(L[day(d)]){streak++;d.setDate(d.getDate()-1)}
+  const tm=S.reduce((a,s)=>a+s.masks.length,0),mm=S.reduce((a,s)=>a+mast(s),0),mx=Math.max(1,...days.map(x=>x.ok+x.ko));
+  app.innerHTML=`<h1>📊 Statistiques</h1><div class="mut" style="margin-bottom:14px">Ta progression, jour après jour</div>
+  <div class="kp"><div class="card"><b>${ok+ko}</b><span class="mut">réponses</span></div><div class="card"><b>${pc(ok,ok+ko)}%</b><span class="mut">de réussite</span></div>
+  <div class="card"><b>🔥 ${streak}</b><span class="mut">jour(s) d'affilée</span></div><div class="card"><b>${pc(mm,tm)}%</b><span class="mut">cartes maîtrisées</span></div></div>
+  <h2>14 derniers jours</h2><div class="card"><div class="chart">${days.map(x=>`<div><i style="height:${x.ko/mx*90}px;background:var(--ko)"></i><i style="height:${x.ok/mx*90}px;background:var(--ok)"></i><span>${x.l}</span></div>`).join('')}</div>
+  <div class="mut" style="margin-top:6px"><span style="color:var(--ok)">■</span> sues &nbsp; <span style="color:var(--ko)">■</span> ratées</div></div>
+  <h2>Par schéma</h2>${S.map(s=>{const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="row"><b style="flex:3">${esc(s.name)}</b><span class="mut s">${p}%</span></div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${mast(s)}/${s.masks.length} maîtrisées${w?` · ${w} à retravailler`:''}</div></div>`}).join('')||'<p class="mut">Aucun schéma pour l\'instant.</p>'}${tabs('s')}`;
+}
+function pick(f){
+  if(!f)return;const r=new FileReader();
+  r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1100/Math.max(im.width,im.height)),c=document.createElement('canvas');
+    c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    D={i:null,name:'',img:c.toDataURL('image/jpeg',.72),masks:[]};editor()};im.src=r.result};r.readAsDataURL(f);
+}
+function edit(i){D={i,name:S[i].name,img:S[i].img,masks:JSON.parse(JSON.stringify(S[i].masks))};editor()}
+function ml(){const h=sel>=0?(r=>[[r.x,r.y],[r.x+r.w,r.y],[r.x,r.y+r.h],[r.x+r.w,r.y+r.h]].map(c=>`<div class="hd" style="left:${c[0]}%;top:${c[1]}%"></div>`).join(''))(D.masks[sel]):'';
+  const b=r=>`left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%`;
+  return D.masks.map((r,i)=>`<div class="m${i==sel?' sel':''}" style="${b(r)}">${i+1}</div>`).join('')+(tmp?`<div class="m cur" style="${b(tmp)}"></div>`:'')+h}
+function draw(){$('ml').innerHTML=ml();$('dz').disabled=sel<0;
+  $('hint').innerHTML=sel>=0?`<b>Zone ${sel+1}</b> : glisse-la pour la déplacer, tire un coin pour la redimensionner.`:`${D.masks.length} zone(s). Glisse sur le schéma pour en tracer une, touche une zone pour la modifier.`}
+function snap(){hist.push(JSON.stringify(D.masks))}
+function undo(){if(hist.length){D.masks=JSON.parse(hist.pop());sel=-1;draw()}}
+function dz(){if(sel>=0){snap();D.masks.splice(sel,1);sel=-1;draw()}}
+function editor(){
+  sel=-1;tmp=null;hist=[];
+  app.innerHTML=`<h1>${D.i===null?'Nouveau schéma':'Modifier le schéma'}</h1><input type="text" id="nm" placeholder="Nom du schéma" value="${esc(D.name)}">
+  <p class="mut" id="hint" style="margin:0 0 8px"></p><div class="stage" id="stg"><img src="${D.img}"><span id="ml"></span></div>
+  ${D.i!==null?'<p style="text-align:center"><button class="ko" style="padding:8px 12px;font-size:14px" onclick="del()">Supprimer le schéma</button></p>':''}
+  <div class="bar"><div class="row"><button onclick="home()">✕</button><button onclick="undo()">↩︎ Annuler</button><button id="dz" onclick="dz()">🗑 Zone</button><button class="pri" onclick="fin()">Enregistrer</button></div></div>`;
+  const g=$('stg');let mode=null,a=null,off=null;
+  const pt=e=>{const b=g.getBoundingClientRect();return{x:Math.max(0,Math.min(100,(e.clientX-b.left)/b.width*100)),y:Math.max(0,Math.min(100,(e.clientY-b.top)/b.height*100))}};
+  g.onpointerdown=e=>{g.setPointerCapture(e.pointerId);const p=pt(e),b=g.getBoundingClientRect(),rx=26/b.width*100,ry=26/b.height*100;mode=null;
+    if(sel>=0){const r=D.masks[sel];for(const [cx,cy,ax,ay] of [[r.x,r.y,r.x+r.w,r.y+r.h],[r.x+r.w,r.y,r.x,r.y+r.h],[r.x,r.y+r.h,r.x+r.w,r.y],[r.x+r.w,r.y+r.h,r.x,r.y]])
+      if(Math.abs(p.x-cx)<rx&&Math.abs(p.y-cy)<ry){snap();mode='rs';a={x:ax,y:ay};break}}
+    if(!mode){let h=-1;D.masks.forEach((r,i)=>{if(p.x>=r.x&&p.x<=r.x+r.w&&p.y>=r.y&&p.y<=r.y+r.h)h=i});
+      if(h>=0){sel=h;snap();mode='mv';off={x:p.x-D.masks[h].x,y:p.y-D.masks[h].y}}else{sel=-1;mode='dr';a=p}}
+    draw()};
+  g.onpointermove=e=>{if(!mode)return;const p=pt(e);
+    if(mode=='mv'){const r=D.masks[sel];r.x=Math.max(0,Math.min(100-r.w,p.x-off.x));r.y=Math.max(0,Math.min(100-r.h,p.y-off.y))}
+    else{const r={x:Math.min(a.x,p.x),y:Math.min(a.y,p.y),w:Math.abs(p.x-a.x),h:Math.abs(p.y-a.y)};if(mode=='rs'){if(r.w>1&&r.h>1)Object.assign(D.masks[sel],r)}else tmp=r}
+    draw()};
+  g.onpointerup=()=>{if(mode=='dr'){if(tmp&&tmp.w>1.5&&tmp.h>1.2){snap();D.masks.push(tmp);sel=D.masks.length-1}tmp=null}mode=null;draw()};
+  draw();
+}
+function fin(){
+  if(!D.masks.length){alert('Ajoute au moins une zone à masquer.');return}
+  const n=$('nm').value.trim()||'Schéma '+(S.length+1);
+  if(D.i===null)S.push({name:n,img:D.img,masks:D.masks});else Object.assign(S[D.i],{name:n,masks:D.masks});
+  save();home();
+}
+function del(){if(confirm('Supprimer ce schéma ?')){S.splice(D.i,1);save();home()}}
+
+function start(i,w){
+  const s=S[i],q=(w?weak(s):s.masks.map((_,k)=>k)).sort(()=>Math.random()-.5);
+  st={i,s,q,rev:false,all:true,total:q.length,ok:0,ko:0};study();
+}
+function study(){
+  const s=st.s,c=st.q[0];
+  if(c===undefined){const p=pc(st.ok,st.ok+st.ko);
+    app.innerHTML=`<div class="center"><h1>🎉 Terminé !</h1><p>${st.total} cartes validées.<br>Réussite au premier essai : <b>${pc(st.total-st.ko,st.total)}%</b></p>
+    <div class="row"><button onclick="start(${st.i})">Recommencer</button><button class="pri" onclick="stats()">Voir mes stats</button></div></div>`;return}
+  const b=s.masks.map((r,k)=>{const cu=k==c;if(!st.all&&!cu)return'';
+    return`<div class="m${cu?(st.rev?' rev':' cur'):''}" style="left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%"></div>`}).join('');
+  app.innerHTML=`<div class="row"><button class="s" onclick="home()">←</button><b style="flex:3">${esc(s.name)}</b><button class="s" onclick="st.all=!st.all;study()">${st.all?'Tout masqué':'Un seul'}</button></div>
+  <div class="prog" style="margin:10px 0"><i style="width:${(st.total-st.q.length)/st.total*100}%"></i></div>
+  <div class="mut" style="margin-bottom:8px">${st.total-st.q.length}/${st.total} validées · ✓ ${st.ok} · ✗ ${st.ko}</div>
+  <div class="stage" onclick="rv()" style="touch-action:manipulation"><img src="${s.img}">${b}</div>
+  <p class="mut center" style="padding:12px 0;font-size:15px">${st.rev?'Tu le savais ?':'Que cache la zone bleue ? Touche pour révéler.'}</p>
+  <div class="bar"><div class="row">${st.rev?'<button class="ko" onclick="ans(0)">✗ Pas su</button><button class="ok" onclick="ans(1)">✓ Su</button>':'<button class="pri" onclick="rv()">Révéler</button>'}</div></div>`;
+}
+function rv(){if(!st.rev){st.rev=true;study()}}
+function ans(ok){
+  const c=st.q[0],k=day();L[k]=L[k]||{ok:0,ko:0};st.s.masks[c].last=ok?1:0;
+  if(ok){L[k].ok++;st.ok++;st.q.shift()}else{L[k].ko++;st.ko++;st.q.push(st.q.shift())}
+  save();st.rev=false;study();
+}
+async function out(list,name){
+  let by='';try{by=localStorage.getItem('sfp')||''}catch(e){}
+  if(!by){by=(prompt('Ton prénom (pour que tes amis sachent de qui vient la fiche) :')||'').trim();try{localStorage.setItem('sfp',by)}catch(e){}}
+  const d={app:'schemas-flash',v:1,fiches:list.map(s=>({name:s.name,img:s.img,masks:s.masks.map(({x,y,w,h})=>({x,y,w,h})),by:s.by||by}))};
+  const f=new File([JSON.stringify(d)],(name.replace(/[^\w\-]+/g,'_').slice(0,40)||'fiche')+'.sflash.json',{type:'application/json'});
+  try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}}catch(e){if(e.name==='AbortError')return}
+  const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+async function imp(files){
+  let n=0,dup=0;
+  for(const f of files){try{const d=JSON.parse(await f.text());if(d.app!=='schemas-flash')continue;
+    for(const x of d.fiches){if(!x.img||!x.masks)continue;
+      if(S.some(s=>s.name===x.name&&s.img.length===x.img.length)){dup++;continue}
+      S.push({name:x.name,img:x.img,masks:x.masks.map(({x,y,w,h})=>({x,y,w,h})),by:x.by});n++}}catch(e){}}
+  save();home();alert(n+' fiche(s) ajoutée(s)'+(dup?' · '+dup+' déjà présente(s)':''));
+}
+home();
+</script></body></html>
