@@ -142,11 +142,29 @@ function fin(){
 function delc(i){if(confirm('Supprimer « '+S[i].name+' » et toutes ses cartes ?')){S.splice(i,1);save();home()}}
 function del(){if(confirm('Supprimer ce schéma ?')){S.splice(D.i,1);save();home()}}
 
+const BASE=[8,4,2,1.1,.6,.35];
+const lvOf=m=>m.lv!==undefined?m.lv:(m.last===1?2:m.last===0?0:null);
+const wt=m=>{const l=lvOf(m);if(l===null)return 6;const d=m.t?(Date.now()-m.t)/864e5:7;return BASE[l]*(1+Math.min(d,30)/10)};
+function cards(t,v,w){const ss=t==='s'?[v]:t==='f'?S.map((s,i)=>s.f===F[v]?i:-1).filter(i=>i>=0):S.map((_,i)=>i),q=[];
+  ss.forEach(i=>S[i].masks.forEach((m,k)=>{if(!w||m.last===0)q.push([i,k])}));return q}
 function go(t,v,w){
-  const ss=t==='s'?[v]:t==='f'?S.map((s,i)=>s.f===F[v]?i:-1).filter(i=>i>=0):S.map((_,i)=>i),q=[];
-  ss.forEach(i=>S[i].masks.forEach((m,k)=>{if(!w||m.last===0)q.push([i,k])}));
-  if(!q.length){alert('Aucune carte à réviser ici.');return}
-  q.sort(()=>Math.random()-.5);st={sp:[t,v,w],q,rev:false,all:true,total:q.length,ok:0,ko:0,f:new Set()};study();
+  const n=cards(t,v,w).length;if(!n){alert('Aucune carte à réviser ici.');return}
+  let last='10';try{last=localStorage.getItem('sfn')||'10'}catch(e){}
+  const o=document.createElement('div');o.id='mvb';o.style.cssText='position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9';
+  o.onclick=e=>{if(e.target===o)o.remove()};
+  o.innerHTML=`<div style="background:var(--bg);width:100%;max-width:640px;box-sizing:border-box;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))"><b>Combien de questions ?</b>
+  <div class="mut" style="margin:4px 0 12px">${n} carte(s) ${w?'ratée(s) ':''}disponible(s). Les cartes non sues reviennent plus souvent, sans que les sues disparaissent.</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px">${[5,10,15,20,0].map(x=>`<button class="${String(x)===last?'pri':''}" onclick="run('${t}',${v||0},${w||0},${x})">${x||'Tout'}</button>`).join('')}</div>
+  <button style="width:100%;margin-top:10px" onclick="document.getElementById('mvb').remove()">Annuler</button></div>`;
+  document.body.appendChild(o);
+}
+function run(t,v,w,n){
+  const o=document.getElementById('mvb');if(o)o.remove();
+  try{localStorage.setItem('sfn',n)}catch(e){}
+  let q=cards(t,v,w).map(c=>({c,k:Math.pow(Math.random(),1/wt(S[c[0]].masks[c[1]]))})).sort((a,b)=>b.k-a.k);
+  if(n&&q.length>n)q=q.slice(0,n);
+  q=q.map(x=>x.c).sort(()=>Math.random()-.5);
+  st={sp:[t,v,w],q,rev:false,all:true,total:q.length,ok:0,ko:0,f:new Set(),seen:new Set()};study();
 }
 function study(){
   const [si,c]=st.q[0]||[];
@@ -164,8 +182,10 @@ function study(){
 }
 function rv(){if(!st.rev){st.rev=true;study()}}
 function ans(ok){
-  const [si,c]=st.q[0],k=day();L[k]=L[k]||{ok:0,ko:0};S[si].masks[c].last=ok?1:0;
-  if(ok){L[k].ok++;st.ok++;st.q.shift()}else{L[k].ko++;st.ko++;st.f.add(si+'-'+c);st.q.push(st.q.shift())}
+  const [si,c]=st.q[0],m=S[si].masks[c],key=si+'-'+c,k=day();L[k]=L[k]||{ok:0,ko:0};
+  if(!st.seen.has(key)){st.seen.add(key);m.lv=ok?Math.min(5,(lvOf(m)||0)+1):Math.max(0,(lvOf(m)||0)-2)}
+  m.last=ok?1:0;m.t=Date.now();
+  if(ok){L[k].ok++;st.ok++;st.q.shift()}else{L[k].ko++;st.ko++;st.f.add(key);st.q.push(st.q.shift())}
   save();st.rev=false;study();
 }
 async function out(list,name){
