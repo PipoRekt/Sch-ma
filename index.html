@@ -12,7 +12,7 @@ h1{font-size:24px;margin:4px 0 2px}h2{font-size:16px;margin:22px 0 10px}
 button,.btn{font:inherit;border-radius:12px;padding:11px 14px;background:var(--card);color:var(--fg);border:1px solid var(--bd);cursor:pointer}
 button:disabled{opacity:.35}
 .pri{background:var(--ac);color:#fff;border-color:var(--ac)}.ok{background:var(--ok);color:#fff;border-color:var(--ok)}.ko{background:var(--ko);color:#fff;border-color:var(--ko)}
-.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.s{flex:0}
+.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.row>.s{flex:0 0 auto;padding:11px 10px}.card .row{flex-wrap:wrap}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
 .top{display:flex;gap:12px;align-items:center;margin-bottom:10px}.top img{width:72px;height:72px;object-fit:cover;border-radius:10px}.top>div{flex:1;min-width:0}
 .mut{color:var(--mut);font-size:13px}
@@ -46,8 +46,8 @@ let D,st,sel=-1,tmp=null,hist=[],fo=null;
 
 function tabs(on){return `<div class="tabs"><div class="row"><button class="${on=='h'?'on':''}" onclick="fo=null;home()">📚 Schémas</button><button class="${on=='s'?'on':''}" onclick="stats()">📊 Statistiques</button></div></div>`}
 const fst=f=>{const ss=S.filter(s=>s.f===f);return{ns:ss.length,n:ss.reduce((a,s)=>a+s.masks.length,0),m:ss.reduce((a,s)=>a+mast(s),0),w:ss.reduce((a,s)=>a+weak(s).length,0)}};
-function cardS(s,i){const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="top"><img src="${s.img}"><div><b>${esc(s.name)}</b><div class="mut">${s.masks.length} cartes${s.by?' · par '+esc(s.by):''}</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button class="pri" onclick="go('s',${i})">Réviser</button>${w?`<button class="ko" onclick="go('s',${i},1)">Ratées (${w})</button>`:''}<button class="s" onclick="out([S[${i}]],S[${i}].name)">📤</button><button class="s" onclick="edit(${i})">✏️</button><button class="s" onclick="delc(${i})">🗑</button></div></div>`}
-function cardF(f,j){const t=fst(f),p=pc(t.m,t.n);return `<div class="card"><div class="top"><div style="font-size:36px;flex:0">📁</div><div><b>${esc(f)}</b><div class="mut">${t.ns} schéma(s) · ${t.n} cartes</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button onclick="fo=${j};home()">Ouvrir</button>${t.n?`<button class="pri" onclick="go('f',${j})">Réviser</button>`:''}<button class="s" onclick="renF(${j})">✏️</button><button class="s" onclick="delF(${j})">🗑</button></div></div>`}
+function cardS(s,i){const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="top"><img src="${s.img}"><div><b>${esc(s.name)}</b><div class="mut">${s.masks.length} cartes${s.by?' · par '+esc(s.by):''}</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button class="pri" onclick="go('s',${i})">Réviser</button>${w?`<button class="ko" onclick="go('s',${i},1)">Ratées (${w})</button>`:''}<button class="s" onclick="out([S[${i}]],S[${i}].name)">📤</button><button class="s" onclick="edit(${i})">✏️</button><button class="s" onclick="mv(${i})">📁</button><button class="s" onclick="delc(${i})">🗑</button></div></div>`}
+function cardF(f,j){const t=fst(f),p=pc(t.m,t.n);return `<div class="card"><div class="top"><div style="font-size:36px;flex:0 0 auto;width:46px;text-align:center">📁</div><div><b>${esc(f)}</b><div class="mut">${t.ns} schéma(s) · ${t.n} cartes</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button onclick="fo=${j};home()">Ouvrir</button>${t.n?`<button class="pri" onclick="go('f',${j})">Réviser</button>`:''}<button class="s" onclick="renF(${j})">✏️</button><button class="s" onclick="delF(${j})">🗑</button></div></div>`}
 function home(){
   const fn=fo!==null?F[fo]:null,list=S.map((s,i)=>[s,i]).filter(([s])=>fn!==null?s.f===fn:!s.f);let h='';
   const add=`<label class="btn pri" style="display:block;text-align:center;margin-bottom:10px">📷 Nouveau schéma${fn!==null?' dans ce dossier':''}<input type="file" accept="image/*" hidden onchange="pick(this.files[0])"></label>`;
@@ -65,6 +65,15 @@ function home(){
   if(!list.length&&fn!==null)h+='<p class="mut center">Dossier vide : ajoute un schéma ici, ou choisis ce dossier dans l\'écran ✏️ d\'un schéma existant.</p>';
   app.innerHTML=h+tabs('h');
 }
+function mv(i){
+  const o=document.createElement('div');o.id='mvb';o.style.cssText='position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9';
+  o.onclick=e=>{if(e.target===o)o.remove()};
+  const cur=S[i].f,b=(c,l,a)=>`<button class="${c?'pri':''}" style="text-align:left" onclick="${a}">${l}</button>`;
+  o.innerHTML=`<div style="background:var(--bg);width:100%;max-width:640px;box-sizing:border-box;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:75vh;overflow:auto"><b>Déplacer « ${esc(S[i].name)} » vers…</b><div style="display:grid;gap:8px;margin-top:12px">${b(!cur,'📂 Sans dossier',`mvto(${i},-1)`)}${F.map((f,j)=>b(f===cur,'📁 '+esc(f),`mvto(${i},${j})`)).join('')}${b(0,'＋ Nouveau dossier…',`mvnew(${i})`)}<button onclick="document.getElementById('mvb').remove()">Annuler</button></div></div>`;
+  document.body.appendChild(o);
+}
+function mvto(i,j){if(j<0)delete S[i].f;else S[i].f=F[j];save();const o=document.getElementById('mvb');if(o)o.remove();home()}
+function mvnew(i){const n=(prompt('Nom du dossier :')||'').trim();if(!n)return;if(!F.includes(n))F.push(n);mvto(i,F.indexOf(n))}
 function newF(){const n=(prompt('Nom du dossier (ex. Cardio) :')||'').trim();if(n&&!F.includes(n)){F.push(n);save();home()}}
 function renF(j){const n=(prompt('Nouveau nom :',F[j])||'').trim();if(n&&!F.includes(n)){S.forEach(s=>{if(s.f===F[j])s.f=n});F[j]=n;save();home()}}
 function delF(j){if(confirm('Supprimer le dossier « '+F[j]+' » ? Les schémas ne sont pas supprimés, ils repassent « sans dossier ».')){S.forEach(s=>{if(s.f===F[j])delete s.f});F.splice(j,1);fo=null;save();home()}}
@@ -104,7 +113,7 @@ function dz(){if(sel>=0){snap();D.masks.splice(sel,1);sel=-1;draw()}}
 function editor(){
   sel=-1;tmp=null;hist=[];
   app.innerHTML=`<h1>${D.i===null?'Nouveau schéma':'Modifier le schéma'}</h1><input type="text" id="nm" placeholder="Nom du schéma" value="${esc(D.name)}">
-  <select id="fsel" onchange="fsel(this)">${fopts()}</select><p class="mut" id="hint" style="margin:0 0 8px"></p><div class="stage" id="stg"><img src="${D.img}"><span id="ml"></span></div>
+  <select id="fsl" onchange="fchg(this)">${fopts()}</select><p class="mut" id="hint" style="margin:0 0 8px"></p><div class="stage" id="stg"><img src="${D.img}"><span id="ml"></span></div>
   ${D.i!==null?'<p style="text-align:center"><button class="ko" style="padding:8px 12px;font-size:14px" onclick="del()">Supprimer le schéma</button></p>':''}
   <div class="bar"><div class="row"><button onclick="home()">✕</button><button onclick="undo()">↩︎ Annuler</button><button id="dz" onclick="dz()">🗑 Zone</button><button class="pri" onclick="fin()">Enregistrer</button></div></div>`;
   const g=$('stg');let mode=null,a=null,off=null;
@@ -123,7 +132,7 @@ function editor(){
   draw();
 }
 function fopts(){return '<option value="">📂 Sans dossier</option>'+F.map(f=>`<option${f===D.f?' selected':''}>${esc(f)}</option>`).join('')+'<option value="__new">＋ Nouveau dossier…</option>'}
-function fsel(el){if(el.value==='__new'){const n=(prompt('Nom du dossier :')||'').trim();if(n){if(!F.includes(n))F.push(n);D.f=n}}else D.f=el.value;el.innerHTML=fopts()}
+function fchg(el){if(el.value==='__new'){const n=(prompt('Nom du dossier :')||'').trim();if(n){if(!F.includes(n))F.push(n);D.f=n}}else D.f=el.value;el.innerHTML=fopts()}
 function fin(){
   if(!D.masks.length){alert('Ajoute au moins une zone à masquer.');return}
   const n=$('nm').value.trim()||'Schéma '+(S.length+1);
