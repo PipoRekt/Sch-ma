@@ -16,7 +16,7 @@ button:disabled{opacity:.35}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
 .top{display:flex;gap:12px;align-items:center;margin-bottom:10px}.top img{width:72px;height:72px;object-fit:cover;border-radius:10px}.top>div{flex:1;min-width:0}
 .mut{color:var(--mut);font-size:13px}
-input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);margin-bottom:8px}
+select,input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);margin-bottom:8px}
 .stage{position:relative;line-height:0;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:12px;overflow:hidden;border:1px solid var(--bd)}
 .stage *{pointer-events:none}.stage img{width:100%;display:block}
 .m{position:absolute;background:var(--mask);border-radius:3px;box-shadow:0 0 0 1px var(--bg);color:var(--bg);font:700 11px/1 system-ui;display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -34,43 +34,65 @@ input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10px;bord
 .chart i{display:block;border-radius:3px 3px 0 0}.chart span{font-size:10px;color:var(--mut);line-height:1.6}
 </style></head><body><div id="app"></div>
 <script>
-let S=[],L={};try{S=JSON.parse(localStorage.getItem('sf')||'[]');L=JSON.parse(localStorage.getItem('sfl')||'{}')}catch(e){}
-const save=()=>{try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L))}catch(e){alert('Stockage plein : supprime un schéma.')}};
+let S=[],L={},F=[];try{S=JSON.parse(localStorage.getItem('sf')||'[]');L=JSON.parse(localStorage.getItem('sfl')||'{}');F=JSON.parse(localStorage.getItem('sff')||'[]')}catch(e){}
+S.forEach(s=>{if(s.f&&!F.includes(s.f))F.push(s.f)});
+const save=()=>{try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L));localStorage.setItem('sff',JSON.stringify(F))}catch(e){alert('Stockage plein : supprime un schéma.')}};
 const $=id=>document.getElementById(id),app=$('app');
 const esc=t=>String(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const day=d=>(d||new Date()).toLocaleDateString('sv');
 const mast=s=>s.masks.filter(m=>m.last===1).length, weak=s=>s.masks.map((m,k)=>m.last===0?k:-1).filter(k=>k>=0);
 const pc=(a,b)=>b?Math.round(a/b*100):0;
-let D,st,sel=-1,tmp=null,hist=[];
+let D,st,sel=-1,tmp=null,hist=[],fo=null;
 
-function tabs(on){return `<div class="tabs"><div class="row"><button class="${on=='h'?'on':''}" onclick="home()">📚 Schémas</button><button class="${on=='s'?'on':''}" onclick="stats()">📊 Statistiques</button></div></div>`}
+function tabs(on){return `<div class="tabs"><div class="row"><button class="${on=='h'?'on':''}" onclick="fo=null;home()">📚 Schémas</button><button class="${on=='s'?'on':''}" onclick="stats()">📊 Statistiques</button></div></div>`}
+const fst=f=>{const ss=S.filter(s=>s.f===f);return{ns:ss.length,n:ss.reduce((a,s)=>a+s.masks.length,0),m:ss.reduce((a,s)=>a+mast(s),0),w:ss.reduce((a,s)=>a+weak(s).length,0)}};
+function cardS(s,i){const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="top"><img src="${s.img}"><div><b>${esc(s.name)}</b><div class="mut">${s.masks.length} cartes${s.by?' · par '+esc(s.by):''}</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button class="pri" onclick="go('s',${i})">Réviser</button>${w?`<button class="ko" onclick="go('s',${i},1)">Ratées (${w})</button>`:''}<button class="s" onclick="out([S[${i}]],S[${i}].name)">📤</button><button class="s" onclick="edit(${i})">✏️</button><button class="s" onclick="delc(${i})">🗑</button></div></div>`}
+function cardF(f,j){const t=fst(f),p=pc(t.m,t.n);return `<div class="card"><div class="top"><div style="font-size:36px;flex:0">📁</div><div><b>${esc(f)}</b><div class="mut">${t.ns} schéma(s) · ${t.n} cartes</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div><div class="row"><button onclick="fo=${j};home()">Ouvrir</button>${t.n?`<button class="pri" onclick="go('f',${j})">Réviser</button>`:''}<button class="s" onclick="renF(${j})">✏️</button><button class="s" onclick="delF(${j})">🗑</button></div></div>`}
 function home(){
-  app.innerHTML=`<h1>🧠 Schémas Flash</h1><div class="mut" style="margin-bottom:14px">${S.length} schéma(s) · ${S.reduce((a,s)=>a+s.masks.length,0)} cartes</div>
-  <label class="btn pri" style="display:block;text-align:center;margin-bottom:10px">📷 Nouveau schéma (photo ou galerie)<input type="file" accept="image/*" hidden onchange="pick(this.files[0])"></label>
-  <div class="row" style="margin-bottom:16px"><label class="btn" style="text-align:center">📥 Importer<input type="file" accept=".json,application/json" multiple hidden onchange="imp(this.files);this.value=''"></label><button onclick="S.length&&out(S,'mes-fiches')">📤 Tout partager</button></div>
-  ${S.length?S.map((s,i)=>{const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="top"><img src="${s.img}"><div><b>${esc(s.name)}</b>
-  <div class="mut">${s.masks.length} cartes${s.by?' · par '+esc(s.by):''}</div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${p}% maîtrisé</div></div></div>
-  <div class="row"><button class="pri" onclick="start(${i})">Réviser</button>${w?`<button class="ko" onclick="start(${i},1)">Ratées (${w})</button>`:''}<button class="s" onclick="out([S[${i}]],S[${i}].name)">📤</button><button class="s" onclick="edit(${i})">✏️</button></div></div>`}).join(''):'<p class="mut center">Prends un schéma en photo, masque les légendes, révise.</p>'}${tabs('h')}`;
+  const fn=fo!==null?F[fo]:null,list=S.map((s,i)=>[s,i]).filter(([s])=>fn!==null?s.f===fn:!s.f);let h='';
+  const add=`<label class="btn pri" style="display:block;text-align:center;margin-bottom:10px">📷 Nouveau schéma${fn!==null?' dans ce dossier':''}<input type="file" accept="image/*" hidden onchange="pick(this.files[0])"></label>`;
+  if(fn!==null){const t=fst(fn);
+    h=`<div class="row"><button class="s" onclick="fo=null;home()">←</button><h1 style="flex:3;margin:0">📁 ${esc(fn)}</h1></div><div class="mut" style="margin:6px 0 14px">${t.ns} schéma(s) · ${t.n} cartes · ${pc(t.m,t.n)}% maîtrisé</div>${add}`;
+    if(t.n)h+=`<div class="row" style="margin-bottom:14px"><button class="pri" onclick="go('f',${fo})">▶ Réviser le dossier</button>${t.w?`<button class="ko" onclick="go('f',${fo},1)">Ratées (${t.w})</button>`:''}<button class="s" onclick="out(S.filter(s=>s.f===F[${fo}]),F[${fo}])">📤</button></div>`;
+  }else{
+    h=`<h1>🧠 Schémas Flash</h1><div class="mut" style="margin-bottom:14px">${S.length} schéma(s) · ${F.length} dossier(s)</div>${add}
+    <div class="row" style="margin-bottom:10px"><button onclick="newF()">📁 Nouveau dossier</button><button onclick="go('a')">🎲 Tout réviser</button></div>
+    <div class="row" style="margin-bottom:16px"><label class="btn" style="text-align:center">📥 Importer<input type="file" accept=".json,application/json" multiple hidden onchange="imp(this.files);this.value=''"></label><button onclick="S.length&&out(S,'mes-fiches')">📤 Tout partager</button></div>`;
+    h+=F.map(cardF).join('');if(F.length&&list.length)h+='<h2>Sans dossier</h2>';
+  }
+  h+=list.map(([s,i])=>cardS(s,i)).join('');
+  if(!list.length&&!F.length)h+='<p class="mut center">Prends un schéma en photo, masque les légendes, révise.</p>';
+  if(!list.length&&fn!==null)h+='<p class="mut center">Dossier vide : ajoute un schéma ici, ou choisis ce dossier dans l\'écran ✏️ d\'un schéma existant.</p>';
+  app.innerHTML=h+tabs('h');
 }
+function newF(){const n=(prompt('Nom du dossier (ex. Cardio) :')||'').trim();if(n&&!F.includes(n)){F.push(n);save();home()}}
+function renF(j){const n=(prompt('Nouveau nom :',F[j])||'').trim();if(n&&!F.includes(n)){S.forEach(s=>{if(s.f===F[j])s.f=n});F[j]=n;save();home()}}
+function delF(j){if(confirm('Supprimer le dossier « '+F[j]+' » ? Les schémas ne sont pas supprimés, ils repassent « sans dossier ».')){S.forEach(s=>{if(s.f===F[j])delete s.f});F.splice(j,1);fo=null;save();home()}}
 function stats(){
   const days=[...Array(14)].map((_,k)=>{const d=new Date();d.setDate(d.getDate()-13+k);const k2=day(d);return{k:k2,l:d.toLocaleDateString('fr',{weekday:'narrow'}),...(L[k2]||{ok:0,ko:0})}});
   const ok=Object.values(L).reduce((a,x)=>a+x.ok,0),ko=Object.values(L).reduce((a,x)=>a+x.ko,0);
   let streak=0,d=new Date();if(!L[day(d)])d.setDate(d.getDate()-1);while(L[day(d)]){streak++;d.setDate(d.getDate()-1)}
   const tm=S.reduce((a,s)=>a+s.masks.length,0),mm=S.reduce((a,s)=>a+mast(s),0),mx=Math.max(1,...days.map(x=>x.ok+x.ko));
+  const E=S.map(s=>({n:s.name,m:mast(s),t:s.masks.length,w:weak(s).length,seen:s.masks.some(x=>x.last!==undefined),p:pc(mast(s),s.masks.length)})).sort((a,b)=>b.p-a.p||b.m-a.m);
+  const FE=F.map(f=>{const t=fst(f);return{n:f,m:t.m,t:t.n,w:t.w,seen:S.some(s=>s.f===f&&s.masks.some(x=>x.last!==undefined)),p:pc(t.m,t.n)}}).filter(x=>x.t).sort((a,b)=>b.p-a.p||b.m-a.m);
+  const rk=(arr,ic)=>arr.map((x,i)=>`<div class="card"><div class="row"><b style="flex:3">${x.seen&&i<3?['🥇','🥈','🥉'][i]+' ':''}${ic}${esc(x.n)}</b><span class="mut s">${x.p}%</span></div><div class="prog" style="margin:8px 0 4px"><i style="width:${x.p}%"></i></div><div class="mut">${x.m}/${x.t} maîtrisées${x.w?` · ${x.w} à retravailler`:''}</div></div>`).join('');
+  const rv2=a=>a.filter(x=>x.seen),bs=rv2(E),bf=rv2(FE);
+  const ins=[bf.length?`🏆 Dossier le mieux maîtrisé : <b>${esc(bf[0].n)}</b> (${bf[0].p}%)`:'',bs.length?`🏆 Schéma le mieux maîtrisé : <b>${esc(bs[0].n)}</b> (${bs[0].p}%)`:'',bs.length>1&&bs[bs.length-1].p<100?`⚠️ À renforcer : <b>${esc(bs[bs.length-1].n)}</b> (${bs[bs.length-1].p}%)`:'',bf.length>1&&bf[bf.length-1].p<100?`⚠️ Dossier à renforcer : <b>${esc(bf[bf.length-1].n)}</b> (${bf[bf.length-1].p}%)`:''].filter(Boolean);
   app.innerHTML=`<h1>📊 Statistiques</h1><div class="mut" style="margin-bottom:14px">Ta progression, jour après jour</div>
   <div class="kp"><div class="card"><b>${ok+ko}</b><span class="mut">réponses</span></div><div class="card"><b>${pc(ok,ok+ko)}%</b><span class="mut">de réussite</span></div>
   <div class="card"><b>🔥 ${streak}</b><span class="mut">jour(s) d'affilée</span></div><div class="card"><b>${pc(mm,tm)}%</b><span class="mut">cartes maîtrisées</span></div></div>
+  ${ins.length?`<div class="card" style="margin-top:12px;line-height:1.9">${ins.join('<br>')}</div>`:''}
   <h2>14 derniers jours</h2><div class="card"><div class="chart">${days.map(x=>`<div><i style="height:${x.ko/mx*90}px;background:var(--ko)"></i><i style="height:${x.ok/mx*90}px;background:var(--ok)"></i><span>${x.l}</span></div>`).join('')}</div>
   <div class="mut" style="margin-top:6px"><span style="color:var(--ok)">■</span> sues &nbsp; <span style="color:var(--ko)">■</span> ratées</div></div>
-  <h2>Par schéma</h2>${S.map(s=>{const p=pc(mast(s),s.masks.length),w=weak(s).length;return `<div class="card"><div class="row"><b style="flex:3">${esc(s.name)}</b><span class="mut s">${p}%</span></div><div class="prog" style="margin:8px 0 4px"><i style="width:${p}%"></i></div><div class="mut">${mast(s)}/${s.masks.length} maîtrisées${w?` · ${w} à retravailler`:''}</div></div>`}).join('')||'<p class="mut">Aucun schéma pour l\'instant.</p>'}${tabs('s')}`;
+  ${FE.length?'<h2>Classement des dossiers</h2>'+rk(FE,'📁 '):''}<h2>Classement des schémas</h2>${rk(E,'')||'<p class="mut">Aucun schéma pour l\'instant.</p>'}${tabs('s')}`;
 }
 function pick(f){
   if(!f)return;const r=new FileReader();
   r.onload=()=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1100/Math.max(im.width,im.height)),c=document.createElement('canvas');
     c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
-    D={i:null,name:'',img:c.toDataURL('image/jpeg',.72),masks:[]};editor()};im.src=r.result};r.readAsDataURL(f);
+    D={i:null,f:fo!==null?F[fo]:'',name:'',img:c.toDataURL('image/jpeg',.72),masks:[]};editor()};im.src=r.result};r.readAsDataURL(f);
 }
-function edit(i){D={i,name:S[i].name,img:S[i].img,masks:JSON.parse(JSON.stringify(S[i].masks))};editor()}
+function edit(i){D={i,f:S[i].f||'',name:S[i].name,img:S[i].img,masks:JSON.parse(JSON.stringify(S[i].masks))};editor()}
 function ml(){const h=sel>=0?(r=>[[r.x,r.y],[r.x+r.w,r.y],[r.x,r.y+r.h],[r.x+r.w,r.y+r.h]].map(c=>`<div class="hd" style="left:${c[0]}%;top:${c[1]}%"></div>`).join(''))(D.masks[sel]):'';
   const b=r=>`left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%`;
   return D.masks.map((r,i)=>`<div class="m${i==sel?' sel':''}" style="${b(r)}">${i+1}</div>`).join('')+(tmp?`<div class="m cur" style="${b(tmp)}"></div>`:'')+h}
@@ -82,7 +104,7 @@ function dz(){if(sel>=0){snap();D.masks.splice(sel,1);sel=-1;draw()}}
 function editor(){
   sel=-1;tmp=null;hist=[];
   app.innerHTML=`<h1>${D.i===null?'Nouveau schéma':'Modifier le schéma'}</h1><input type="text" id="nm" placeholder="Nom du schéma" value="${esc(D.name)}">
-  <p class="mut" id="hint" style="margin:0 0 8px"></p><div class="stage" id="stg"><img src="${D.img}"><span id="ml"></span></div>
+  <select id="fsel" onchange="fsel(this)">${fopts()}</select><p class="mut" id="hint" style="margin:0 0 8px"></p><div class="stage" id="stg"><img src="${D.img}"><span id="ml"></span></div>
   ${D.i!==null?'<p style="text-align:center"><button class="ko" style="padding:8px 12px;font-size:14px" onclick="del()">Supprimer le schéma</button></p>':''}
   <div class="bar"><div class="row"><button onclick="home()">✕</button><button onclick="undo()">↩︎ Annuler</button><button id="dz" onclick="dz()">🗑 Zone</button><button class="pri" onclick="fin()">Enregistrer</button></div></div>`;
   const g=$('stg');let mode=null,a=null,off=null;
@@ -100,26 +122,31 @@ function editor(){
   g.onpointerup=()=>{if(mode=='dr'){if(tmp&&tmp.w>1.5&&tmp.h>1.2){snap();D.masks.push(tmp);sel=D.masks.length-1}tmp=null}mode=null;draw()};
   draw();
 }
+function fopts(){return '<option value="">📂 Sans dossier</option>'+F.map(f=>`<option${f===D.f?' selected':''}>${esc(f)}</option>`).join('')+'<option value="__new">＋ Nouveau dossier…</option>'}
+function fsel(el){if(el.value==='__new'){const n=(prompt('Nom du dossier :')||'').trim();if(n){if(!F.includes(n))F.push(n);D.f=n}}else D.f=el.value;el.innerHTML=fopts()}
 function fin(){
   if(!D.masks.length){alert('Ajoute au moins une zone à masquer.');return}
   const n=$('nm').value.trim()||'Schéma '+(S.length+1);
-  if(D.i===null)S.push({name:n,img:D.img,masks:D.masks});else Object.assign(S[D.i],{name:n,masks:D.masks});
+  const o={name:n,masks:D.masks};if(D.f)o.f=D.f;if(D.i===null)S.push({...o,img:D.img});else{Object.assign(S[D.i],o);if(!D.f)delete S[D.i].f}
   save();home();
 }
+function delc(i){if(confirm('Supprimer « '+S[i].name+' » et toutes ses cartes ?')){S.splice(i,1);save();home()}}
 function del(){if(confirm('Supprimer ce schéma ?')){S.splice(D.i,1);save();home()}}
 
-function start(i,w){
-  const s=S[i],q=(w?weak(s):s.masks.map((_,k)=>k)).sort(()=>Math.random()-.5);
-  st={i,s,q,rev:false,all:true,total:q.length,ok:0,ko:0};study();
+function go(t,v,w){
+  const ss=t==='s'?[v]:t==='f'?S.map((s,i)=>s.f===F[v]?i:-1).filter(i=>i>=0):S.map((_,i)=>i),q=[];
+  ss.forEach(i=>S[i].masks.forEach((m,k)=>{if(!w||m.last===0)q.push([i,k])}));
+  if(!q.length){alert('Aucune carte à réviser ici.');return}
+  q.sort(()=>Math.random()-.5);st={sp:[t,v,w],q,rev:false,all:true,total:q.length,ok:0,ko:0,f:new Set()};study();
 }
 function study(){
-  const s=st.s,c=st.q[0];
-  if(c===undefined){const p=pc(st.ok,st.ok+st.ko);
-    app.innerHTML=`<div class="center"><h1>🎉 Terminé !</h1><p>${st.total} cartes validées.<br>Réussite au premier essai : <b>${pc(st.total-st.ko,st.total)}%</b></p>
-    <div class="row"><button onclick="start(${st.i})">Recommencer</button><button class="pri" onclick="stats()">Voir mes stats</button></div></div>`;return}
-  const b=s.masks.map((r,k)=>{const cu=k==c;if(!st.all&&!cu)return'';
+  const [si,c]=st.q[0]||[];
+  if(c===undefined){
+    app.innerHTML=`<div class="center"><h1>🎉 Terminé !</h1><p>${st.total} cartes validées.<br>Réussite au premier essai : <b>${pc(st.total-st.f.size,st.total)}%</b></p>
+    <div class="row"><button onclick="go(...st.sp)">Recommencer</button><button class="pri" onclick="stats()">Voir mes stats</button></div></div>`;return}
+  const s=S[si],b=s.masks.map((r,k)=>{const cu=k==c;if(!st.all&&!cu)return'';
     return`<div class="m${cu?(st.rev?' rev':' cur'):''}" style="left:${r.x}%;top:${r.y}%;width:${r.w}%;height:${r.h}%"></div>`}).join('');
-  app.innerHTML=`<div class="row"><button class="s" onclick="home()">←</button><b style="flex:3">${esc(s.name)}</b><button class="s" onclick="st.all=!st.all;study()">${st.all?'Tout masqué':'Un seul'}</button></div>
+  app.innerHTML=`<div class="row"><button class="s" onclick="home()">←</button><b style="flex:3">${esc(s.name)}${s.f?` <span class="mut">· 📁 ${esc(s.f)}</span>`:''}</b><button class="s" onclick="st.all=!st.all;study()">${st.all?'Tout masqué':'Un seul'}</button></div>
   <div class="prog" style="margin:10px 0"><i style="width:${(st.total-st.q.length)/st.total*100}%"></i></div>
   <div class="mut" style="margin-bottom:8px">${st.total-st.q.length}/${st.total} validées · ✓ ${st.ok} · ✗ ${st.ko}</div>
   <div class="stage" onclick="rv()" style="touch-action:manipulation"><img src="${s.img}">${b}</div>
@@ -128,14 +155,14 @@ function study(){
 }
 function rv(){if(!st.rev){st.rev=true;study()}}
 function ans(ok){
-  const c=st.q[0],k=day();L[k]=L[k]||{ok:0,ko:0};st.s.masks[c].last=ok?1:0;
-  if(ok){L[k].ok++;st.ok++;st.q.shift()}else{L[k].ko++;st.ko++;st.q.push(st.q.shift())}
+  const [si,c]=st.q[0],k=day();L[k]=L[k]||{ok:0,ko:0};S[si].masks[c].last=ok?1:0;
+  if(ok){L[k].ok++;st.ok++;st.q.shift()}else{L[k].ko++;st.ko++;st.f.add(si+'-'+c);st.q.push(st.q.shift())}
   save();st.rev=false;study();
 }
 async function out(list,name){
   let by='';try{by=localStorage.getItem('sfp')||''}catch(e){}
   if(!by){by=(prompt('Ton prénom (pour que tes amis sachent de qui vient la fiche) :')||'').trim();try{localStorage.setItem('sfp',by)}catch(e){}}
-  const d={app:'schemas-flash',v:1,fiches:list.map(s=>({name:s.name,img:s.img,masks:s.masks.map(({x,y,w,h})=>({x,y,w,h})),by:s.by||by}))};
+  const d={app:'schemas-flash',v:1,fiches:list.map(s=>({name:s.name,img:s.img,masks:s.masks.map(({x,y,w,h})=>({x,y,w,h})),by:s.by||by,f:s.f}))};
   const f=new File([JSON.stringify(d)],(name.replace(/[^\w\-]+/g,'_').slice(0,40)||'fiche')+'.sflash.json',{type:'application/json'});
   try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return}}catch(e){if(e.name==='AbortError')return}
   const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
@@ -145,7 +172,7 @@ async function imp(files){
   for(const f of files){try{const d=JSON.parse(await f.text());if(d.app!=='schemas-flash')continue;
     for(const x of d.fiches){if(!x.img||!x.masks)continue;
       if(S.some(s=>s.name===x.name&&s.img.length===x.img.length)){dup++;continue}
-      S.push({name:x.name,img:x.img,masks:x.masks.map(({x,y,w,h})=>({x,y,w,h})),by:x.by});n++}}catch(e){}}
+      if(x.f&&!F.includes(x.f))F.push(x.f);S.push({name:x.name,img:x.img,masks:x.masks.map(({x,y,w,h})=>({x,y,w,h})),by:x.by,f:x.f});n++}}catch(e){}}
   save();home();alert(n+' fiche(s) ajoutée(s)'+(dup?' · '+dup+' déjà présente(s)':''));
 }
 home();
