@@ -34,9 +34,28 @@ select,input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10
 .chart i{display:block;border-radius:3px 3px 0 0}.chart span{font-size:10px;color:var(--mut);line-height:1.6}
 </style></head><body><div id="app"></div>
 <script>
-let S=[],L={},F=[];try{S=JSON.parse(localStorage.getItem('sf')||'[]');L=JSON.parse(localStorage.getItem('sfl')||'{}');F=JSON.parse(localStorage.getItem('sff')||'[]')}catch(e){}
-S.forEach(s=>{if(s.f&&!F.includes(s.f))F.push(s.f)});
-const save=()=>{try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L));localStorage.setItem('sff',JSON.stringify(F))}catch(e){alert('Stockage plein : supprime un schéma.')}};
+let S=[],L={},F=[],DB=null;
+const idbOpen=()=>new Promise((res,rej)=>{try{const r=indexedDB.open('sflash',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});
+const idbGet=k=>new Promise((res,rej)=>{const q=DB.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)});
+function save(){
+  return new Promise(res=>{
+    if(DB){try{const tx=DB.transaction('kv','readwrite'),o=tx.objectStore('kv');o.put(S,'sf');o.put(L,'sfl');o.put(F,'sff');
+      tx.oncomplete=()=>res(true);tx.onerror=tx.onabort=()=>{alert('Enregistrement impossible : il ne reste peut-être plus de place sur l’appareil.');res(false)};return}catch(e){}}
+    try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L));localStorage.setItem('sff',JSON.stringify(F));res(true)}catch(e){alert('Stockage plein : supprime un schéma.');res(false)}
+  });
+}
+async function init(){
+  const ls=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
+  try{
+    DB=await idbOpen();const d=await idbGet('sf');
+    if(d===undefined){S=ls('sf')||[];L=ls('sfl')||{};F=ls('sff')||[];
+      if(await save()){['sf','sfl','sff'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}})}}
+    else{S=d;L=(await idbGet('sfl'))||{};F=(await idbGet('sff'))||[]}
+    try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+  }catch(e){DB=null;S=ls('sf')||[];L=ls('sfl')||{};F=ls('sff')||[]}
+  S.forEach(s=>{if(s.f&&!F.includes(s.f))F.push(s.f)});
+  home();
+}
 const $=id=>document.getElementById(id),app=$('app');
 const esc=t=>String(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const day=d=>(d||new Date()).toLocaleDateString('sv');
@@ -204,5 +223,5 @@ async function imp(files){
       if(x.f&&!F.includes(x.f))F.push(x.f);S.push({name:x.name,img:x.img,masks:x.masks.map(({x,y,w,h})=>({x,y,w,h})),by:x.by,f:x.f});n++}}catch(e){}}
   save();home();alert(n+' fiche(s) ajoutée(s)'+(dup?' · '+dup+' déjà présente(s)':''));
 }
-home();
+init();
 </script></body></html>
