@@ -34,27 +34,39 @@ select,input[type=text]{font:inherit;width:100%;box-sizing:border-box;padding:10
 .chart i{display:block;border-radius:3px 3px 0 0}.chart span{font-size:10px;color:var(--mut);line-height:1.6}
 </style></head><body><div id="app"></div>
 <script>
-let S=[],L={},F=[],DB=null;
-const idbOpen=()=>new Promise((res,rej)=>{try{const r=indexedDB.open('sflash',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)}catch(e){rej(e)}});
-const idbGet=k=>new Promise((res,rej)=>{const q=DB.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)});
-function save(){
-  return new Promise(res=>{
-    if(DB){try{const tx=DB.transaction('kv','readwrite'),o=tx.objectStore('kv');o.put(S,'sf');o.put(L,'sfl');o.put(F,'sff');
-      tx.oncomplete=()=>res(true);tx.onerror=tx.onabort=()=>{alert('Enregistrement impossible : il ne reste peut-être plus de place sur l’appareil.');res(false)};return}catch(e){}}
-    try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L));localStorage.setItem('sff',JSON.stringify(F));res(true)}catch(e){alert('Stockage plein : supprime un schéma.');res(false)}
-  });
+const VER='v6';let S=[],L={},F=[],DB=null,mode='?',emsg='';
+const idbOpen=()=>new Promise((res,rej)=>{try{const r=indexedDB.open('sflash',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error||new Error('open'))}catch(e){rej(e)}});
+async function openDB(){DB=await idbOpen();DB.onclose=()=>{DB=null};DB.onversionchange=()=>{try{DB.close()}catch(e){}DB=null}}
+const idbGet=k=>new Promise((res,rej)=>{try{const q=DB.transaction('kv').objectStore('kv').get(k);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)}catch(e){rej(e)}});
+const put=()=>new Promise((res,rej)=>{try{const tx=DB.transaction('kv','readwrite'),o=tx.objectStore('kv');o.put(S,'sf');o.put(L,'sfl');o.put(F,'sff');tx.oncomplete=()=>res(true);tx.onerror=tx.onabort=()=>rej(tx.error||new Error('abort'))}catch(e){rej(e)}});
+async function save(){
+  if(mode==='idb'){
+    for(let i=0;i<2;i++){try{if(!DB)await openDB();await put();return true}catch(e){emsg=(e&&e.name)||'erreur';DB=null}}
+    alert('Enregistrement impossible (base interne : '+emsg+'). Ta dernière modification n’est pas sauvegardée : ferme complètement l’appli, rouvre-la et recommence.');return false;
+  }
+  try{localStorage.setItem('sf',JSON.stringify(S));localStorage.setItem('sfl',JSON.stringify(L));localStorage.setItem('sff',JSON.stringify(F));return true}
+  catch(e){alert('Stockage plein (mode limité'+(emsg?' : '+emsg:'')+'). Utilise « Compresser les images » en bas de l’accueil, ou supprime un schéma.');return false}
 }
 async function init(){
   const ls=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch(e){return null}};
   try{
-    DB=await idbOpen();const d=await idbGet('sf');
+    await openDB();const d=await idbGet('sf');mode='idb';
     if(d===undefined){S=ls('sf')||[];L=ls('sfl')||{};F=ls('sff')||[];
       if(await save()){['sf','sfl','sff'].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}})}}
     else{S=d;L=(await idbGet('sfl'))||{};F=(await idbGet('sff'))||[]}
     try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-  }catch(e){DB=null;S=ls('sf')||[];L=ls('sfl')||{};F=ls('sff')||[]}
+  }catch(e){DB=null;mode='ls';emsg=(e&&e.name)||String(e).slice(0,30);S=ls('sf')||[];L=ls('sfl')||{};F=ls('sff')||[]}
   S.forEach(s=>{if(s.f&&!F.includes(s.f))F.push(s.f)});
   home();
+}
+const mb=()=>(S.reduce((a,s)=>a+s.img.length,0)/1e6).toFixed(1);
+async function shrink(){
+  if(!confirm('Réduire la taille des images pour gagner de la place ? La netteté baisse un peu, les zones restent identiques.'))return;
+  const b=mb();
+  for(const s of S){try{const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=s.img});
+    const k=Math.min(1,800/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*k;c.height=im.height*k;c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+    const n=c.toDataURL('image/jpeg',.6);if(n.length<s.img.length)s.img=n}catch(e){}}
+  if(await save())alert('Images : '+b+' Mo → '+mb()+' Mo');home();
 }
 const $=id=>document.getElementById(id),app=$('app');
 const esc=t=>String(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -82,6 +94,7 @@ function home(){
   h+=list.map(([s,i])=>cardS(s,i)).join('');
   if(!list.length&&!F.length)h+='<p class="mut center">Prends un schéma en photo, masque les légendes, révise.</p>';
   if(!list.length&&fn!==null)h+='<p class="mut center">Dossier vide : ajoute un schéma ici, ou choisis ce dossier dans l\'écran ✏️ d\'un schéma existant.</p>';
+  h+=`<p class="mut" style="text-align:center;margin-top:20px">${VER} · stockage : ${mode==='idb'?'IndexedDB (large)':'localStorage (limité'+(emsg?' · '+esc(emsg):'')+')'} · images ${mb()} Mo<br><button style="margin-top:8px;font-size:13px;padding:8px 12px" onclick="shrink()">Compresser les images</button></p>`;
   app.innerHTML=h+tabs('h');
 }
 function mv(i){
